@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firebase 註冊與登入</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Firebase SDK -->
+    <script type="module" src="https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js"></script>
+    <script type="module" src="https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js"></script>
+    <script type="module" src="https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js"></script>
+</head>
+
+<body class="container mt-5">
+    <h1 class="text-center mb-4">註冊與登入</h1>
+
+    <!-- Nav Tabs -->
+    <ul class="nav nav-tabs" id="authTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="register-tab" data-bs-toggle="tab" data-bs-target="#register"
+                type="button" role="tab" aria-controls="register" aria-selected="true">註冊</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="login-tab" data-bs-toggle="tab" data-bs-target="#login" type="button"
+                role="tab" aria-controls="login" aria-selected="false">登入</button>
+        </li>
+    </ul>
+
+    <!-- Tab Content -->
+    <div class="tab-content mt-3" id="authTabsContent">
+        <!-- Register Tab -->
+        <div class="tab-pane fade show active" id="register" role="tabpanel" aria-labelledby="register-tab">
+            <button id="registerBtn" class="btn btn-primary">使用 Google 註冊</button>
+        </div>
+
+        <!-- Login Tab -->
+        <div class="tab-pane fade" id="login" role="tabpanel" aria-labelledby="login-tab">
+            <button id="loginBtn" class="btn btn-success">使用 Google 登入</button>
+        </div>
+    </div>
+
+    <!-- 顯示用戶資訊的區域 -->
+    <div id="userInfo" class="mt-4" style="display: none;">
+        <h2>用戶資訊</h2>
+        <p><strong>信箱：</strong><span id="userEmail"></span></p>
+        <p><strong>姓名：</strong><span id="userName"></span></p>
+        <p><strong>最後登入時間：</strong><span id="lastLogin"></span></p>
+        <img id="userPhoto" src="" alt="用戶相片" style="width:100px; height:100px;">
+    </div>
+
+    <!-- 顯示資料庫所有用戶資料 -->
+    <div id="allUsers" class="mt-4" style="display: none;">
+        <h2>所有用戶資料</h2>
+        <table class="table table-striped table-hover">
+            <thead>
+                <tr>
+                    <th scope="col">頭像</th>
+                    <th scope="col">姓名</th>
+                    <th scope="col">信箱</th>
+                    <th scope="col">最後登入時間</th>
+                </tr>
+            </thead>
+            <tbody id="usersTableBody"></tbody>
+        </table>
+    </div>
+
+
+    <!-- Firebase Script -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+        import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+        import { getDatabase, ref, set, update, get, child } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+
+        // Firebase 配置
+        const firebaseConfig = {
+            apiKey: "AIzaSyA5NaL2Zv-DFGv4jm11dl17dSvbAubcTlY",
+            authDomain: "webprogramming-feb0c.firebaseapp.com",
+            databaseURL: "https://webprogramming-feb0c-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "webprogramming-feb0c",
+            storageBucket: "webprogramming-feb0c.firebasestorage.app",
+            messagingSenderId: "387978887434",
+            appId: "1:387978887434:web:8be3c89fed08f37b30faf3"
+        };
+
+        // 初始化 Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const database = getDatabase(app);
+        const provider = new GoogleAuthProvider();
+
+        const loginBtn = document.getElementById("loginBtn");
+        const usersTableBody = document.getElementById("usersTableBody");
+
+        // 顯示用戶資訊的函數
+        function displayUserInfo(user) {
+            document.getElementById("userEmail").textContent = user.email;
+            document.getElementById("userName").textContent = user.displayName;
+            document.getElementById("userPhoto").src = user.photoURL;
+            document.getElementById("lastLogin").textContent = new Date().toLocaleString();
+            document.getElementById("userInfo").style.display = "block";
+        }
+
+        // 清除用戶資訊的函數
+        function clearUserInfo() {
+            document.getElementById("userEmail").textContent = "";
+            document.getElementById("userName").textContent = "";
+            document.getElementById("userPhoto").src = "";
+            document.getElementById("lastLogin").textContent = "";
+            document.getElementById("userInfo").style.display = "none";
+
+            // 隱藏所有用戶資料的欄位
+            const allUsersDiv = document.getElementById("allUsers");
+            allUsersDiv.style.display = "none";
+            usersTableBody.innerHTML = ""; // 清空表格內容
+        }
+
+
+        // 顯示所有用戶資料的函數
+        function displayAllUsers() {
+            const allUsersDiv = document.getElementById("allUsers");
+            allUsersDiv.style.display = "block"; // 確保顯示區域可見
+
+            get(ref(database, 'users/'))
+                .then((snapshot) => {
+                    if (snapshot.exists()) {
+                        const users = snapshot.val();
+                        usersTableBody.innerHTML = ""; // 清空舊資料
+
+                        // 迭代所有用戶資料，生成表格內容
+                        Object.keys(users).forEach((key) => {
+                            const user = users[key];
+                            const row = `
+                        <tr>
+                            <td><img src="${user.photoURL || 'https://via.placeholder.com/50'}" alt="${user.name}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 50%;"></td>
+                            <td>${user.name || '未知用戶'}</td>
+                            <td>${key.replace(/_/g, '.')}</td>
+                            <td>${new Date(user.lastLogin).toLocaleString()}</td>
+                        </tr>`;
+                            usersTableBody.insertAdjacentHTML('beforeend', row);
+                        });
+                    } else {
+                        usersTableBody.innerHTML = "<tr><td colspan='4' class='text-center'>目前沒有用戶資料。</td></tr>";
+                    }
+                })
+                .catch((error) => {
+                    console.error("讀取所有用戶資料失敗:", error);
+                    usersTableBody.innerHTML = "<tr><td colspan='4' class='text-center'>讀取資料失敗，請稍後再試。</td></tr>";
+                });
+        }
+
+
+        // 登入按鈕事件
+        loginBtn.addEventListener("click", () => {
+            if (loginBtn.innerText === "使用 Google 登入") {
+                // 登入邏輯
+                signInWithPopup(auth, provider)
+                    .then((result) => {
+                        const user = result.user;
+                        const userRef = ref(database, 'users/' + user.email.replace(/\./g, '_'));
+
+                        // 檢查是否已有註冊紀錄
+                        get(userRef).then((snapshot) => {
+                            if (snapshot.exists()) {
+                                // 如果已註冊，更新最後登入時間
+                                update(userRef, {
+                                    lastLogin: new Date().toISOString()
+                                });
+
+                                displayUserInfo(user);
+                                displayAllUsers(); // 顯示所有用戶資料
+                                loginBtn.innerText = "登出";
+                                alert("登入成功！");
+                            } else {
+                                alert("您尚未註冊，請先註冊！");
+                            }
+                        }).catch((error) => {
+                            console.error("檢查註冊狀態失敗:", error);
+                            alert("檢查失敗：" + error.message);
+                        });
+                    })
+                    .catch((error) => {
+                        console.error("登入失敗:", error);
+                        alert("登入失敗：" + error.message);
+                    });
+            } else {
+                // 登出邏輯
+                signOut(auth)
+                    .then(() => {
+                        clearUserInfo(); // 隱藏所有用戶資料和用戶資訊
+                        loginBtn.innerText = "使用 Google 登入";
+                        alert("您已成功登出！");
+                    })
+                    .catch((error) => {
+                        console.error("登出失敗:", error);
+                        alert("登出失敗：" + error.message);
+                    });
+            }
+        });
+    </script>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+
+</html>
