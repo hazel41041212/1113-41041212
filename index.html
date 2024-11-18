@@ -92,6 +92,43 @@
 
         const loginBtn = document.getElementById("loginBtn");
         const usersTableBody = document.getElementById("usersTableBody");
+        const registerBtn = document.getElementById("registerBtn");
+
+        registerBtn.addEventListener("click", () => {
+            signInWithPopup(auth, provider)
+                .then((result) => {
+                    const user = result.user;
+                    const userRef = ref(database, 'users/' + user.email.replace(/\./g, '_'));
+
+                    // 檢查用戶是否已註冊
+                    get(userRef).then((snapshot) => {
+                        if (!snapshot.exists()) {
+                            // 如果尚未註冊，新增用戶資料
+                            set(userRef, {
+                                name: user.displayName,
+                                email: user.email,
+                                photoURL: user.photoURL || '',
+                                lastLogin: new Date().toISOString()
+                            }).then(() => {
+                                displayUserInfo(user); // 顯示用戶資訊
+                                alert("註冊成功！");
+                            }).catch((error) => {
+                                console.error("新增用戶失敗:", error);
+                                alert("註冊失敗：" + error.message);
+                            });
+                        } else {
+                            alert("您已註冊過，請直接登入！");
+                        }
+                    }).catch((error) => {
+                        console.error("檢查用戶資料失敗:", error);
+                        alert("檢查失敗：" + error.message);
+                    });
+                })
+                .catch((error) => {
+                    console.error("註冊失敗:", error);
+                    alert("註冊失敗：" + error.message);
+                });
+        });
 
         // 顯示用戶資訊的函數
         function displayUserInfo(user) {
